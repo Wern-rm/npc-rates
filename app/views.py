@@ -5,7 +5,7 @@
     :copyright: (c) 2022 by Roman Morozov.
     :license: MIT, see LICENSE for more details.
 """
-from flask import Blueprint, jsonify, make_response, request
+from flask import Blueprint, jsonify, make_response, request, Response
 from extensions import db
 import logging
 import requests
@@ -43,26 +43,20 @@ def update_rates():
     if date is None:
         logger.error('The <date> parameter was not found.')
         data = jsonify(status=400, message='The <date> parameter was not found.')
-        response = make_response(data, 400)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=400)
 
     try:
         param_date = parse(date).date()
     except Exception as e:
         logger.error(e)
         data = jsonify(status=400, message='The <date> parameter was not found.')
-        response = make_response(data, 400)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=400)
 
     response = requests.get(url=f'https://www.nbrb.by/api/exrates/rates?ondate={param_date}&periodicity=0')
     if response.status_code != 200:
         logger.error('The NC RB API is not available.')
         data = jsonify(status=400, message='The NC RB API is not available.')
-        response = make_response(data, 400)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=400)
 
     for i in response.json():
         found = Rates.query.filter(Rates.date == parse(i['Date']).date(), Rates.currency_id == int(i['Cur_ID'])).first()
@@ -87,9 +81,7 @@ def update_rates():
                 logger.info(f'Rates is found - {i}')
 
     data = jsonify(status=200, message=f'Success update rates for {param_date}.')
-    response = make_response(data, 200)
-    response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-    return response
+    return send_response(data=data.json, status_code=200)
 
 
 @bp.get('/rate')
@@ -99,33 +91,25 @@ def rate():
     if date is None:
         logger.error('The <date> parameter was not found.')
         data = jsonify(status=400, message='The <date> parameter was not found.', result=None)
-        response = make_response(data, 400)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=400)
 
     if currency_id == 0:
         logger.error('The <currency_id> parameter was not found.')
         data = jsonify(status=400, message='The <currency_id> parameter was not found.', result=None)
-        response = make_response(data, 400)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=400)
 
     try:
         param_date = parse(date).date()
     except Exception as e:
         logger.error(e)
         data = jsonify(status=400, message='The <date> parameter was not found.', result=None)
-        response = make_response(data, 400)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=400)
 
     query_rate = Rates.query.filter(Rates.date == param_date, Rates.currency_id == currency_id).first()
     if not query_rate:
         logger.error('No data found.')
         data = jsonify(status=400, message='No data found.', result=None)
-        response = make_response(data, 400)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=400)
 
     last_day_date = param_date - timedelta(days=1)
     query_last_day_rate = Rates.query.filter(Rates.date == last_day_date, Rates.currency_id == currency_id).first()
@@ -137,13 +121,15 @@ def rate():
                                       rate=query_rate.rate,
                                       date=param_date.strftime('%Y-%m-%d'),
                                       course_change=round(query_rate.rate - query_last_day_rate.rate, 3)).json)
-        response = make_response(data, 200)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=200)
     else:
         data = jsonify(status=200,
                        message='Data received successfully.',
                        result=jsonify(currency_id=currency_id, iso=query_rate.iso, rate=query_rate.rate, date=param_date.strftime('%Y-%m-%d')).json)
-        response = make_response(data, 200)
-        response.headers['CRC32'] = zlib.crc32(bytes(str(data.json), 'utf-8'))
-        return response
+        return send_response(data=data.json, status_code=200)
+
+
+def send_response(data: dict, status_code: int) -> Response:
+    _response = make_response(data, status_code)
+    _response.headers['CRC32'] = zlib.crc32(bytes(str(data), 'utf-8'))
+    return _response
