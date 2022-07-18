@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+    app:
+        build: .
+        command: python app/server.py
+        ports:
+            - "8080:8080"
+        volumes:
+            - ./app:/app
+        container_name: NcpRates
+        restart: always
+        environment:
+          - SECRET_KEY=G8190W18tW9f1cbed9b998@04a6!87164Kd5
